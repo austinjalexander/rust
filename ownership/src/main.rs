@@ -75,12 +75,102 @@ fn main() {
     // z1 and z3 go out of scope after main and are dropped
 
     // While this works, taking ownership and then returning ownership with every function is a bit tedious. What if we want to let a function use a value but not take ownership? It’s quite annoying that anything we pass in also needs to be passed back if we want to use it again, in addition to any data resulting from the body of the function that we might want to return as well.
+    // Instead, we can provide a reference to the String value. A reference is like a pointer in that it’s an address we can follow to access the data stored at that address; that data is owned by some other variable. Unlike a pointer, a reference is guaranteed to point to a valid value of a particular type for the life of that reference.
+    // References allow you to refer to some value without taking ownership of it.
+    // We call the action of creating a reference borrowing.
 
     let msg = String::from("please enter");
     // Rust does let us return multiple values using a tuple
     let (v, l) = calculate_length(msg);
 
     println!("length of '{}' is {}", v, l);
+
+    let msg2 = String::from("please enter");
+    let len = calculate_length_v2(&msg2);
+
+    println!("length of '{}' is {}", msg2, len);
+
+    let mut txt = String::from("hello");
+    change(&mut txt);
+    println!("{}", txt);
+
+    // Mutable references have one big restriction: if you have a mutable reference to a value, you can have no other references to that value. 
+    // can't do:
+    /*
+    let mut r_str = String::from("hello");
+    let _r1 = &mut r_str;
+    let _r2 = &mut r_str;
+    println!("{}", _r1);
+
+    This error says that this code is invalid because we cannot borrow s as mutable more than once at a time. The first mutable borrow is in r1 and must last until it’s used in the println!, but between the creation of that mutable reference and its usage, we tried to create another mutable reference in r2 that borrows the same data as r1.
+
+The restriction preventing multiple mutable references to the same data at the same time allows for mutation but in a very controlled fashion. It’s something that new Rustaceans struggle with, because most languages let you mutate whenever you’d like. The benefit of having this restriction is that Rust can prevent data races at compile time. A data race is similar to a race condition and happens when these three behaviors occur:
+
+Two or more pointers access the same data at the same time.
+At least one of the pointers is being used to write to the data.
+There’s no mechanism being used to synchronize access to the data.
+Data races cause undefined behavior and can be difficult to diagnose and fix when you’re trying to track them down at runtime; Rust prevents this problem by refusing to compile code with data races!
+    */
+    let mut r_str = String::from("hello");
+    // As always, we can use curly brackets to create a new scope, allowing for multiple mutable references, just not simultaneous ones:
+    {
+        let _r1 = &mut r_str;
+        println!("{}", _r1);
+    }
+    let _r2 = &mut r_str;
+
+    /*
+    Rust enforces a similar rule for combining mutable and immutable references. This code results in an error:
+    let mut s = String::from("hello");
+
+    let r1 = &s; // no problem
+    let r2 = &s // no problem
+    let r3 = &mut s; // BIG PROBLEM
+    println!("{}, {}, {}", r1, r2, r3);
+
+    We also cannot have a mutable reference while we have an immutable one to the same value.
+
+Users of an immutable reference don’t expect the value to suddenly change out from under them! However, multiple immutable references are allowed because no one who is just reading the data has the ability to affect anyone else’s reading of the data.
+    */
+
+// The scopes of the immutable references r1 and r2 end after the println! where they are last used, which is before the mutable reference r3 is created. These scopes don’t overlap, so this code is allowed. The ability of the compiler to tell that a reference is no longer being used at a point before the end of the scope is called Non-Lexical Lifetimes (NLL for short), and you can read more about it in The Edition Guide.
+    let mut s = String::from("hello");
+
+    let r1 = &s;
+    let r2 = &s;
+    println!("{} and {}", r1, r2);
+    
+    let r3 = &mut s;
+    println!("{}", r3);
+
+    // dangling references
+    // In languages with pointers, it’s easy to erroneously create a dangling pointer--a pointer that references a location in memory that may have been given to someone else--by freeing some memory while preserving a pointer to that memory. In Rust, by contrast, the compiler guarantees that references will never be dangling references: if you have a reference to some data, the compiler will ensure that the data will not go out of scope before the reference to the data does.
+    // let ref_to_nada = dangle();
+
+    /*
+    - At any given time, you can have either one mutable reference or any number of immutable references.
+    - References must always be valid.
+    */
+
+    let s = String::from("testing string stuff");
+
+    let _slice = &s[0..2];
+    // can omit starting index, if i == 0
+    let _slice = &s[..2];
+    let _slice = &s[3..len];
+    // can omit ending index, if i == len
+    let _slice = &s[..len];
+    // thus:
+    let _slice = &s[0..len];
+    // is equivalent to:
+    let _slice = &s[..];
+
+    let first = first_word(&s);
+    // would throw an error if s was mutable
+    // s.clear();
+
+    println!("{}", first)
+
 } 
 
 fn takes_ownership(str: String) {
@@ -103,4 +193,43 @@ fn takes_and_gives_back(s: String) -> String {
 fn calculate_length(s: String) -> (String, usize) {
     let length = s.len();
     (s, length)
+}
+
+fn calculate_length_v2(s: &String) -> usize {
+    s.len()
+    // since borrowing, attempting to modify (by default) would throw an error
+    // s.push_str("blah blah");
+} // Here, s goes out of scope. But because it does not have ownership of what it refers to, it is not dropped.
+
+fn change(s: &mut String) {
+    s.push_str(", world");
+}
+
+// fn dangle() -> &String {
+//     let s = String::from("hello");
+//     &s // reference is returned
+// } // but here s goes out of scope and so is dropped; instead, s should simply be returned as a value
+
+// because usize is only meaningful in the context of &String,
+// there's no guarantee that it will be valid in the future
+// fn first_word(s: &String) -> usize {
+//     let bytes = s.as_bytes();
+//     for (i, &item) in bytes.iter().enumerate() {
+//         // byte literal syntax
+//         if item == b' ' {
+//             return i;
+//         }
+//     }
+//     s.len()
+// }
+// instead can use string slices (where ending index is exclusive):
+fn first_word(s: &str) -> &str {
+    let bytes = s.as_bytes();
+
+    for (i, &item) in bytes.iter().enumerate() {
+        if item == b' ' {
+            return &s[0..i];
+        }
+    }
+    &s[..]
 }
